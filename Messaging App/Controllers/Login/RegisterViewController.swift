@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import FirebaseAuth
 
 class RegisterViewController: UIViewController {
     
@@ -13,14 +14,17 @@ class RegisterViewController: UIViewController {
         let scrollView = UIScrollView()
         scrollView.clipsToBounds = true
         
-        return scrollView
+        return scrollView 
     }()
     
     private let imageView: UIImageView = {
         let imageview = UIImageView()
-        imageview.image = UIImage(systemName: "person")
+        imageview.image = UIImage(systemName: "person.circle")
         imageview.tintColor = .gray
         imageview.contentMode = .scaleAspectFit
+        imageview.layer.masksToBounds = true
+        imageview.layer.borderWidth = 2
+        imageview.layer.borderColor = UIColor.lightGray.cgColor
         return imageview
     }()
     
@@ -136,7 +140,8 @@ class RegisterViewController: UIViewController {
         imageView.addGestureRecognizer(gesture)
     }
     @objc private func didTapChangePic(){
-        print("Change picture called")
+        
+        presentPhotoActionSheet()
     }
     
     override func viewDidLayoutSubviews() {
@@ -146,6 +151,8 @@ class RegisterViewController: UIViewController {
         
         let size = scrollView.width/3
         imageView.frame = CGRect(x: (scrollView.width-size)/2, y: 20, width: size, height: size)
+        imageView.layer.cornerRadius = imageView.width/2
+        
         firstNameField.frame = CGRect(x: 30, y: imageView.bottom + 10, width: scrollView.width-60, height: 35)
         lastNameField.frame = CGRect(x: 30, y: firstNameField.bottom + 10, width: scrollView.width-60, height: 35)
         emailField.frame = CGRect(x: 30, y: lastNameField.bottom + 10, width: scrollView.width-60, height: 35)
@@ -162,10 +169,37 @@ class RegisterViewController: UIViewController {
                   alertUserLoginError()
                   return
               }
-        //Firebase log in
+        //Firebase log in ,
+        //creating a user, using email and password
+        // pay attention to the createUser in registerViewController and signIn in the lognViewController
+        
+        DatabaseManager.shared.userExists(with: email, completion: { [weak self] exists in
+            guard let strongSelf = self else{
+                
+                return
+            }
+            guard !exists else {
+                
+                //user already exists
+                strongSelf.alertUserLoginError(message: "User account for that email already exists")
+                return
+            }
+            
+            FirebaseAuth.Auth.auth().createUser(withEmail: email, password: password, completion: {authResult, error in
+            
+                guard authResult != nil, error == nil else {
+                    print("Error creating user")
+                    return
+                }
+                DatabaseManager.shared.insertUser(with: MessageAppUser(firstName: firstName, lastName: lastName, emailAddress: email))  // for database entry
+                strongSelf.navigationController?.dismiss(animated: true, completion: nil)
+            })
+        })
+        
+        
     }
-    func alertUserLoginError(){
-        let alert = UIAlertController(title: "Ohh no!", message: "Please enter all information to create a new account", preferredStyle: .alert)
+    func alertUserLoginError(message: String = "Please enter all information to create a new account"){
+        let alert = UIAlertController(title: "Ohh no!", message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Dismiss", style: .cancel, handler: nil))
         present(alert, animated: true)
     }
@@ -192,5 +226,63 @@ extension RegisterViewController:UITextFieldDelegate {
         
         return true
     }
-    
 }
+extension RegisterViewController:UIImagePickerControllerDelegate,UINavigationControllerDelegate{ // adding a Profile picture
+    
+    func presentPhotoActionSheet(){
+        let actionSheet = UIAlertController(title: "Profile Picture", message: "How would you like to add a picture?", preferredStyle: .actionSheet)
+        
+        actionSheet.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        actionSheet.addAction(UIAlertAction(title: "Take Picture", style: .default, handler: {[weak self] _ in
+            self?.presentCamera()
+        }))
+        actionSheet.addAction(UIAlertAction(title: "Choose Picture", style: .default, handler: { [weak self] _ in
+            self?.presentPhotoPicker()
+        }))
+        
+        present(actionSheet, animated: true)
+    }
+    
+    func presentCamera(){
+        let vc = UIImagePickerController()
+        vc.sourceType = .camera
+        vc.delegate = self
+        vc.allowsEditing = true
+        present(vc, animated: true)
+        
+    }
+    
+    func presentPhotoPicker(){
+        let vc = UIImagePickerController()
+        vc.sourceType = .photoLibrary
+        vc.delegate = self
+        vc.allowsEditing = true
+        present(vc, animated: true)
+        
+    }
+    
+    
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        picker.dismiss(animated: true, completion: nil)
+        print(info)
+        /*// guard let Image = info[UIImagePickerController.InfoKey.editedImage] as? UIimage else {
+        return
+    } // if u want to use the unedited image   */
+        guard let selectedImage = info[UIImagePickerController.InfoKey.editedImage] as? UIImage else {
+            return
+        }
+         self.imageView.image = selectedImage
+    }
+    
+    
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true, completion: nil)
+    }
+}
+
+
+
+
+
+
+
